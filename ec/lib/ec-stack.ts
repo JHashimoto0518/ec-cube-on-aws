@@ -53,6 +53,16 @@ export class EcStack extends cdk.Stack {
     //
     // ec2 for web
     //
+    const webUserData = ec2.UserData.forLinux({
+      shebang: "#!/bin/bash",
+    })
+    webUserData.addCommands(
+      // setup httpd
+      'dnf install -y httpd',
+      'systemctl start httpd',
+      'systemctl enable httpd',
+      'echo "This is a sample ec site." > /var/www/html/index.html',
+    )
     const webIns = new ec2.Instance(this, 'Web', {
       instanceName: 'ec-lab-ec2-web',
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
@@ -71,6 +81,7 @@ export class EcStack extends cdk.Stack {
           }),
         },
       ],
+      userData: webUserData,
       propagateTagsToVolumeOnCreation: true,
     })
   }
