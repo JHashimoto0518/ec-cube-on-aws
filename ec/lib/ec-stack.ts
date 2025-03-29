@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 export class EcStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -20,7 +21,7 @@ export class EcStack extends cdk.Stack {
         {
           cidrMask: 24,
           name: 'Private',
-          subnetType: ec2.SubnetType.PRIVATE_ISOLATED
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
         }
       ],
       // remove all rules from default security group
@@ -28,7 +29,7 @@ export class EcStack extends cdk.Stack {
       restrictDefaultSecurityGroup: true,
     });
 
-    // security group
+    // security groups
     const webSg = new ec2.SecurityGroup(this, 'WebSg', {
       vpc,
       allowAllOutbound: true,
@@ -36,16 +37,32 @@ export class EcStack extends cdk.Stack {
     })
     webSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'allow http traffic from anywhere')
 
-    // ec2
+    //
+    // roles
+    //
+    const ssmRole = new iam.Role(this, 'SsmRole', {
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "AmazonSSMManagedInstanceCore"
+        ),
+      ],
+      description: 'role for managed by ssm',
+    });
+
+    //
+    // ec2 for web
+    //
     const webIns = new ec2.Instance(this, 'Web', {
       instanceName: 'ec-lab-ec2-web',
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
       machineImage: ec2.MachineImage.latestAmazonLinux2023(),
       vpc,
       vpcSubnets: vpc.selectSubnets({
-        subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
       }),
       securityGroup: webSg,
+      role: ssmRole,
       blockDevices: [
         {
           deviceName: '/dev/xvda',
@@ -54,6 +71,7 @@ export class EcStack extends cdk.Stack {
           }),
         },
       ],
+      propagateTagsToVolumeOnCreation: true,
     })
   }
 }
